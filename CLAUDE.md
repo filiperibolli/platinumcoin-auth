@@ -64,7 +64,8 @@ cd terraform && terraform init && terraform apply
 
 ## Como retomar em outra conversa
 
-1. Leia `PLAN.md` e escolha a próxima fatia não concluída.
-2. Escreva a *definition of done* da fatia (3–5 linhas: o que entra + curl/testes que provam).
-3. Implemente o incremento; rode a verificação; mostre o resultado.
+1. Leia `PLAN.md` (roadmap) e `docs/dod.md` (critério de aceite por fatia); escolha a próxima
+   fatia não concluída.
+2. Implemente o incremento seguindo o **DoD** daquela fatia em `docs/dod.md`.
+3. Rode a verificação (curl/testes); mostre o resultado marcando o DoD.
 4. Se a fatia carrega decisão de peso, escreva o ADR correspondente em `docs/adr/`.
