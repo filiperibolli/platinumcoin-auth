@@ -41,6 +41,9 @@ realm (`keycloak_realm_user_profile`) senão o atributo é ignorado silenciosame
 
 ## Fatias
 
+> O **critério de aceite ("pronto quando")** de cada fatia está em [`docs/dod.md`](docs/dod.md) —
+> use-o como o portão de conclusão. As seções abaixo dão o *objetivo* e o *o que é construído*.
+
 ### Fatia 1 — Login e identidade confiável *(núcleo da tese)*
 **Objetivo:** cadastrar cliente, logar e obter access+refresh com `accountId` no token; endpoint
 protegido que valida via JWKS.
