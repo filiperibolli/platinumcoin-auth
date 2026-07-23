@@ -149,6 +149,33 @@ resource "keycloak_openid_user_attribute_protocol_mapper" "account_id" {
   add_to_userinfo     = true
 }
 
+# --- Fatia 3: role `customer` + audiência do payments (ADR-006) ---
+
+resource "keycloak_role" "customer" {
+  realm_id    = keycloak_realm.platinumcoin.id
+  name        = "customer"
+  description = "Cliente da fintech: pode enviar Pix"
+}
+
+# Scope que carimba o `aud` do payments no access token. Audiência custom (string),
+# sem client registrado para o payments: ele é só consumidor, não participa do OIDC.
+resource "keycloak_openid_client_scope" "payments" {
+  realm_id               = keycloak_realm.platinumcoin.id
+  name                   = "payments"
+  description            = "Audiência do platinumcoin-payments"
+  include_in_token_scope = true
+}
+
+resource "keycloak_openid_audience_protocol_mapper" "payments_audience" {
+  realm_id        = keycloak_realm.platinumcoin.id
+  client_scope_id = keycloak_openid_client_scope.payments.id
+  name            = "payments-audience"
+
+  included_custom_audience = "platinumcoin-payments"
+  add_to_access_token      = true
+  add_to_id_token          = false
+}
+
 # --- Client de harness: login por Direct Access Grants (dev/teste; prod = auth-code+PKCE, ADR-008) ---
 
 resource "keycloak_openid_client" "harness" {
@@ -173,6 +200,7 @@ resource "keycloak_openid_client_default_scopes" "harness" {
     "basic",
     "acr",
     keycloak_openid_client_scope.account.name,
+    keycloak_openid_client_scope.payments.name,
   ]
 }
 
@@ -231,4 +259,13 @@ resource "keycloak_user" "seed" {
   }
 
   depends_on = [keycloak_realm_user_profile.platinumcoin]
+}
+
+# Não-exaustivo: só garante a role customer sem gerenciar as default roles do usuário.
+resource "keycloak_user_roles" "seed" {
+  realm_id   = keycloak_realm.platinumcoin.id
+  user_id    = keycloak_user.seed.id
+  exhaustive = false
+
+  role_ids = [keycloak_role.customer.id]
 }

@@ -8,23 +8,60 @@ downstream **confiam sem poder emitir** — validam via **JWKS**, exigem o `aud`
 Roadmap em [`PLAN.md`](PLAN.md), critérios de aceite em [`docs/dod.md`](docs/dod.md), decisões em
 [`docs/adr/`](docs/adr/).
 
+## Os dois serviços
+
+| Serviço | Pasta | Porta | Papel |
+|---|---|---|---|
+| `platinumcoin-auth` | `/` (raiz) | 8081 | Fachada/BFF sobre o Keycloak: `/v1/auth/*`, `/v1/me` |
+| `platinumcoin-payments` | `downstream/payments` | 8082 | Consumidor: `POST /v1/pix`, valida token via JWKS |
+
+O `payments` **não tem credencial nenhuma do Keycloak** — a confiança dele cabe em duas URLs
+públicas (`issuer-uri` + `jwk-set-uri`). É a assimetria da tese, visível na config (ADR-005/007).
+
 ## Subir
 
 ```bash
 docker-compose up -d                          # Keycloak 26.6 (8080) + Postgres
 (cd terraform && terraform init && terraform apply)   # realm platinumcoin
 mvn spring-boot:run                           # auth-service na 8081
+(cd downstream/payments && mvn spring-boot:run)       # payments na 8082
 ```
 
 ## Endpoints (`/v1`)
 
-| Endpoint | O quê |
-|---|---|
-| `POST /v1/auth/register` | Cria usuário via Admin API (service account de menor privilégio); gera `accountId` |
-| `POST /v1/auth/login` | Direct grant (harness) → access + refresh |
-| `POST /v1/auth/refresh` | Troca refresh por novo par (rotação ativa) |
-| `POST /v1/auth/logout` | Revoga a sessão no IdP |
-| `GET /v1/me` | Identidade extraída do token (RS256 via JWKS) |
+| Endpoint | Serviço | O quê |
+|---|---|---|
+| `POST /v1/auth/register` | auth | Cria usuário via Admin API (service account de menor privilégio); gera `accountId` |
+| `POST /v1/auth/login` | auth | Direct grant (harness) → access + refresh |
+| `POST /v1/auth/refresh` | auth | Troca refresh por novo par (rotação ativa) |
+| `POST /v1/auth/logout` | auth | Revoga a sessão no IdP |
+| `GET /v1/me` | auth | Identidade extraída do token (RS256 via JWKS) |
+| `POST /v1/pix` | payments | Exige role `customer` + `aud` do payments; **debita o `accountId` do token** |
+
+## E2E entre os serviços (a tese na prática)
+
+```bash
+CID="e2e-$(date +%s)"
+
+# login no auth → access token (com accountId, roles e aud do payments)
+ACCESS=$(curl -s -X POST localhost:8081/v1/auth/login -H 'Content-Type: application/json' \
+  -H "X-Correlation-Id: $CID" \
+  -d '{"email":"alice@platinumcoin.dev","password":"Seed@12345"}' | jq -r .accessToken)
+
+# Pix no payments com o mesmo correlationId → comprovante com o accountId DO TOKEN
+curl -s -X POST localhost:8082/v1/pix -H "Authorization: Bearer $ACCESS" \
+  -H 'Content-Type: application/json' -H "X-Correlation-Id: $CID" \
+  -d '{"pixKey":"bob@banco.dev","amount":42.50}' | jq
+
+# regra de ouro: accountId divergente no corpo → 422 ACCOUNT_MISMATCH
+curl -si -X POST localhost:8082/v1/pix -H "Authorization: Bearer $ACCESS" \
+  -H 'Content-Type: application/json' \
+  -d '{"pixKey":"bob@banco.dev","amount":42.50,"accountId":"00000000-0000-0000-0000-000000000000"}'
+
+# sem token → 401 problem+json; o mesmo $CID aparece nos logs JSON dos DOIS serviços
+curl -si -X POST localhost:8082/v1/pix -H 'Content-Type: application/json' \
+  -d '{"pixKey":"bob@banco.dev","amount":1}'
+```
 
 ## Ciclo de sessão e TTLs (racional — Fatia 2)
 

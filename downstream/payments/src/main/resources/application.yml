@@ -1,0 +1,24 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: platinumcoin-payments
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # Toda a confiança deste serviço no IdP cabe nestas duas URLs públicas:
+          # nenhuma credencial de admin, nenhum segredo (assimetria da tese).
+          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8080/realms/platinumcoin}
+          jwk-set-uri: ${KEYCLOAK_JWKS_URI:http://localhost:8080/realms/platinumcoin/protocol/openid-connect/certs}
+
+platinumcoin:
+  payments:
+    required-audience: platinumcoin-payments
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
