@@ -18,6 +18,7 @@ role/scope e **debitam o `accountId` do token, nunca do corpo**.
 | `platinumcoin-payments` | `downstream/payments` | 8082 | Consumidor: `POST /v1/pix`, valida token via JWKS |
 | Keycloak (IdP) | Docker | 8080 | Emite os tokens; realm `platinumcoin` |
 | Postgres (Keycloak) | Docker | 5432 | Persistência do Keycloak |
+| Mailhog (SMTP dev) | Docker | 1025/8025 | Recebe e-mails de verificação/reset; UI em 8025 |
 
 O `payments` **não** tem credencial de admin nem segredo do Keycloak — só conhece issuer/JWKS.
 A duplicação da config de resource server entre os serviços é **proposital** (validação

@@ -6,6 +6,12 @@
   "ssoSessionMaxLifespan": 36000,
   "revokeRefreshToken": true,
   "refreshTokenMaxReuse": 0,
+  "smtpServer": {
+    "host": "mailhog",
+    "port": "1025",
+    "from": "no-reply@platinumcoin.dev",
+    "fromDisplayName": "PlatinumCoin"
+  },
   "components": {
     "org.keycloak.userprofile.UserProfileProvider": [
       {

@@ -68,12 +68,16 @@
 
 ## Fatia 5 — Fluxos de conta de fintech
 
-- [ ] **Mailhog** no compose (SMTP dev; UI em 8025).
-- [ ] Confirmação de e-mail no cadastro (ou `POST /v1/auth/verify-email`) → e-mail **chega no
+- [x] **Mailhog** no compose (SMTP dev; UI em 8025).
+- [x] Confirmação de e-mail no cadastro (ou `POST /v1/auth/verify-email`) → e-mail **chega no
       Mailhog**; **reenvio** de código funciona.
-- [ ] `POST /v1/auth/forgot-password` → e-mail de reset; `POST /v1/auth/reset-password`;
-      `POST /v1/auth/change-password` — delegados às ações nativas do Keycloak.
-- [ ] Pelo menos o fluxo de **reset** verificado (IT ou runbook manual com Mailhog).
+- [x] `POST /v1/auth/forgot-password` → e-mail de reset e `POST /v1/auth/change-password`
+      (re-autentica + revoga sessões) — delegados às ações nativas do Keycloak. *Adaptação
+      consciente:* não há `POST /v1/auth/reset-password` no BFF — o action token do e-mail é
+      consumido pelo próprio Keycloak (ADR-009); um endpoint nosso exigiria reimplementar
+      emissão de prova de identidade fora do IdP.
+- [x] Pelo menos o fluxo de **reset** verificado (IT com Keycloak + Mailhog na mesma network:
+      `AccountFlowIntegrationTests`) e runbook com curl no README.
 
 ## Fatia 6 — MFA (TOTP) *(opcional)*
 

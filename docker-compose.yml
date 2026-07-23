@@ -44,5 +44,13 @@ services:
       retries: 30
       start_period: 30s
 
+  # SMTP de dev (Fatia 5): o Keycloak entrega os e-mails de verificação/reset aqui.
+  # UI em http://localhost:8025 — nenhum e-mail sai da máquina.
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
 volumes:
   keycloak-db:

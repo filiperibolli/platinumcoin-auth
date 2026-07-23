@@ -22,6 +22,9 @@ public class SecurityConfig {
                         // refresh/logout não exigem access token: o refresh token no corpo é a credencial
                         .requestMatchers("/v1/auth/register", "/v1/auth/login",
                                 "/v1/auth/refresh", "/v1/auth/logout").permitAll()
+                        // públicos por natureza (quem esqueceu a senha não tem token);
+                        // change-password NÃO entra aqui — exige access token
+                        .requestMatchers("/v1/auth/verify-email", "/v1/auth/forgot-password").permitAll()
                         .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2

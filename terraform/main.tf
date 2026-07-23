@@ -12,6 +12,15 @@ resource "keycloak_realm" "platinumcoin" {
   sso_session_max_lifespan = "10h0m0s"
   revoke_refresh_token     = true
   refresh_token_max_reuse  = 0
+
+  # Fatia 5 — e-mails de verificação/reset saem pelo Mailhog do compose.
+  # `host` é o nome do serviço na rede Docker (quem envia é o Keycloak, não o Terraform).
+  smtp_server {
+    host              = "mailhog"
+    port              = "1025"
+    from              = "no-reply@platinumcoin.dev"
+    from_display_name = "PlatinumCoin"
+  }
 }
 
 # Keycloak 26.x usa Declarative User Profile por default: atributo não declarado aqui

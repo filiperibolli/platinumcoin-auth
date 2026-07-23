@@ -21,7 +21,7 @@ públicas (`issuer-uri` + `jwk-set-uri`). É a assimetria da tese, visível na c
 ## Subir
 
 ```bash
-docker-compose up -d                          # Keycloak 26.6 (8080) + Postgres
+docker-compose up -d                          # Keycloak 26.6 (8080) + Postgres + Mailhog (UI 8025)
 (cd terraform && terraform init && terraform apply)   # realm platinumcoin
 mvn spring-boot:run                           # auth-service na 8081
 (cd downstream/payments && mvn spring-boot:run)       # payments na 8082
@@ -36,6 +36,9 @@ mvn spring-boot:run                           # auth-service na 8081
 | `POST /v1/auth/refresh` | auth | Troca refresh por novo par (rotação ativa) |
 | `POST /v1/auth/logout` | auth | Revoga a sessão no IdP |
 | `GET /v1/me` | auth | Identidade extraída do token (RS256 via JWKS) |
+| `POST /v1/auth/verify-email` | auth | (Re)envia o e-mail de verificação; 202 sempre (anti-enumeração) |
+| `POST /v1/auth/forgot-password` | auth | E-mail de reset (ação nativa `UPDATE_PASSWORD` do Keycloak); 202 sempre |
+| `POST /v1/auth/change-password` | auth | Autenticado; re-autentica com a senha atual e revoga as sessões |
 | `POST /v1/pix` | payments | Exige role `customer` + `aud` do payments; **debita o `accountId` do token** |
 | `GET /v1/admin/receipts` | payments | Exige role `support`; visão de atendimento dos comprovantes (POC: em memória) |
 
@@ -81,6 +84,33 @@ curl -si -X POST localhost:8082/v1/pix -H "Authorization: Bearer $SUPPORT" \
 curl -s localhost:8082/v1/admin/receipts -H "Authorization: Bearer $SUPPORT" | jq  # → 200
 
 curl -si localhost:8082/v1/admin/receipts -H "Authorization: Bearer $ACCESS"       # customer → 403
+```
+
+## Conta: verificação de e-mail e senhas (Fatia 5)
+
+E-mails saem pelo **Mailhog** (`docker-compose`, UI em <http://localhost:8025>) — nada sai da
+máquina. O cadastro nasce não-verificado e dispara a verificação; reset conclui **na página do
+Keycloak** via action token do e-mail — o BFF nunca vê a senha nova (ADR-009).
+
+```bash
+# cadastro → e-mail de verificação chega no Mailhog (localhost:8025)
+curl -s -X POST localhost:8081/v1/auth/register -H 'Content-Type: application/json' \
+  -d '{"email":"novo@platinumcoin.dev","password":"S3nh@forte123","fullName":"Novo Cliente","cpf":"529.982.247-25"}' | jq
+
+# reenvio da verificação (202 sempre, exista o e-mail ou não)
+curl -si -X POST localhost:8081/v1/auth/verify-email -H 'Content-Type: application/json' \
+  -d '{"email":"novo@platinumcoin.dev"}'
+
+# esqueci a senha → e-mail "Update Your Account"; o link conclui o reset no Keycloak
+curl -si -X POST localhost:8081/v1/auth/forgot-password -H 'Content-Type: application/json' \
+  -d '{"email":"novo@platinumcoin.dev"}'
+
+# troca de senha autenticada: exige token E senha atual; revoga as outras sessões
+TOKEN=$(curl -s -X POST localhost:8081/v1/auth/login -H 'Content-Type: application/json' \
+  -d '{"email":"novo@platinumcoin.dev","password":"S3nh@forte123"}' | jq -r .accessToken)
+curl -si -X POST localhost:8081/v1/auth/change-password -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"currentPassword":"S3nh@forte123","newPassword":"N0v@senha456"}'   # → 204
 ```
 
 ## Ciclo de sessão e TTLs (racional — Fatia 2)

@@ -25,4 +25,8 @@ public record KeycloakProperties(
     public String adminUsersEndpoint() {
         return baseUrl + "/admin/realms/" + realm + "/users";
     }
+
+    public String adminUserEndpoint(String userId, String action) {
+        return adminUsersEndpoint() + "/" + userId + "/" + action;
+    }
 }

@@ -12,6 +12,7 @@ import com.platinumcoin.auth.domain.model.UserRegistration;
 import com.platinumcoin.auth.domain.port.IdentityProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -26,6 +27,7 @@ import org.springframework.web.client.RestClientException;
 import java.net.URI;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Adapter Keycloak da porta IdentityProvider.
@@ -58,7 +60,9 @@ public class KeycloakIdentityProvider implements IdentityProvider {
                 "firstName", firstName(registration.fullName()),
                 "lastName", lastName(registration.fullName()),
                 "enabled", true,
-                "emailVerified", true,
+                // Fatia 5: nasce não-verificado; o e-mail de verificação sai logo após o
+                // cadastro. O realm não bloqueia login sem verificação (POC — ver ADR-009).
+                "emailVerified", false,
                 "attributes", Map.of(
                         "accountId", List.of(registration.accountId()),
                         "cpf", List.of(registration.cpf().digits())),
@@ -179,6 +183,75 @@ public class KeycloakIdentityProvider implements IdentityProvider {
         }
     }
 
+    @Override
+    public void sendVerificationEmail(String email) {
+        findUserIdByEmail(email).ifPresentOrElse(
+                userId -> adminPut(
+                        properties.adminUserEndpoint(userId, "send-verify-email"), null,
+                        "send-verify-email"),
+                // No-op silencioso: quem chamou responde 202 igual (anti-enumeração).
+                () -> log.debug("verify-email para e-mail não cadastrado; ignorando"));
+    }
+
+    @Override
+    public void sendPasswordResetEmail(String email) {
+        findUserIdByEmail(email).ifPresentOrElse(
+                userId -> adminPut(
+                        properties.adminUserEndpoint(userId, "execute-actions-email"),
+                        List.of("UPDATE_PASSWORD"),
+                        "execute-actions-email"),
+                () -> log.debug("forgot-password para e-mail não cadastrado; ignorando"));
+    }
+
+    @Override
+    public void resetPassword(String email, String newPassword) {
+        String userId = findUserIdByEmail(email).orElseThrow(
+                // Quem chama acabou de re-autenticar este e-mail; sumir aqui é anomalia do IdP.
+                () -> new IdentityProviderUnavailableException(
+                        "Usuário autenticado não encontrado na Admin API", null));
+        adminPut(
+                properties.adminUserEndpoint(userId, "reset-password"),
+                Map.of("type", "password", "value", newPassword, "temporary", false),
+                "reset-password");
+        // Senha trocada ⇒ sessões antigas (e seus refresh tokens) não valem mais.
+        try {
+            restClient.post()
+                    .uri(properties.adminUserEndpoint(userId, "logout"))
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + adminTokenClient.accessToken())
+                    .retrieve()
+                    .toBodilessEntity();
+        } catch (RestClientException e) {
+            throw new IdentityProviderUnavailableException("Falha ao revogar sessões", e);
+        }
+    }
+
+    private Optional<String> findUserIdByEmail(String email) {
+        try {
+            List<UserRepresentation> users = restClient.get()
+                    .uri(properties.adminUsersEndpoint() + "?exact=true&email={email}", email)
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + adminTokenClient.accessToken())
+                    .retrieve()
+                    .body(new ParameterizedTypeReference<List<UserRepresentation>>() {});
+            return users == null || users.isEmpty()
+                    ? Optional.empty()
+                    : Optional.of(users.getFirst().id());
+        } catch (RestClientException e) {
+            throw new IdentityProviderUnavailableException("Falha ao consultar usuário na Admin API", e);
+        }
+    }
+
+    private void adminPut(String uri, Object body, String action) {
+        try {
+            RestClient.RequestBodySpec spec = restClient.put()
+                    .uri(uri)
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + adminTokenClient.accessToken())
+                    .contentType(MediaType.APPLICATION_JSON);
+            (body == null ? spec : spec.body(body)).retrieve().toBodilessEntity();
+        } catch (RestClientException e) {
+            throw new IdentityProviderUnavailableException("Falha na Admin API (" + action + ")", e);
+        }
+    }
+
     private String userIdFromLocation(URI location) {
         if (location == null) {
             throw new IdentityProviderUnavailableException("Admin API não retornou Location", null);
@@ -195,6 +268,10 @@ public class KeycloakIdentityProvider implements IdentityProvider {
     private String lastName(String fullName) {
         int space = fullName.trim().indexOf(' ');
         return space < 0 ? "" : fullName.trim().substring(space + 1);
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record UserRepresentation(String id) {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
