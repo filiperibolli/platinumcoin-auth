@@ -3,6 +3,7 @@ package com.platinumcoin.auth.domain.service;
 import com.platinumcoin.auth.domain.model.AuthTokens;
 import com.platinumcoin.auth.domain.model.Cpf;
 import com.platinumcoin.auth.domain.model.RegisteredUser;
+import com.platinumcoin.auth.domain.error.IdentityProviderUnavailableException;
 import com.platinumcoin.auth.domain.model.UserRegistration;
 import com.platinumcoin.auth.domain.port.IdentityProvider;
 import org.slf4j.Logger;
@@ -27,7 +28,16 @@ public class AuthService {
     public RegisteredUser register(String email, String password, String fullName, String rawCpf) {
         Cpf cpf = Cpf.parse(rawCpf);
         String accountId = UUID.randomUUID().toString();
-        return identityProvider.register(new UserRegistration(email, password, fullName, cpf, accountId));
+        RegisteredUser user =
+                identityProvider.register(new UserRegistration(email, password, fullName, cpf, accountId));
+        // Best-effort: SMTP fora do ar não pode desfazer um cadastro que já existe no IdP.
+        // O cliente reenvia depois via /v1/auth/verify-email.
+        try {
+            identityProvider.sendVerificationEmail(email);
+        } catch (IdentityProviderUnavailableException e) {
+            log.warn("Cadastro ok, mas falhou o envio do e-mail de verificação", e);
+        }
+        return user;
     }
 
     public AuthTokens login(String email, String password) {
@@ -43,5 +53,24 @@ public class AuthService {
 
     public void logout(String refreshToken) {
         identityProvider.logout(refreshToken);
+    }
+
+    public void resendVerificationEmail(String email) {
+        identityProvider.sendVerificationEmail(email);
+    }
+
+    public void forgotPassword(String email) {
+        identityProvider.sendPasswordResetEmail(email);
+    }
+
+    /**
+     * Troca de senha autenticada. O Bearer token prova a sessão, mas não a posse da
+     * senha — re-autenticamos com a senha atual antes de trocar, para que um token
+     * vazado não baste para tomar a conta. O IdP revoga as demais sessões em seguida.
+     */
+    public void changePassword(String email, String currentPassword, String newPassword) {
+        identityProvider.login(email, currentPassword);
+        identityProvider.resetPassword(email, newPassword);
+        log.info("Senha alterada; sessões ativas revogadas");
     }
 }
