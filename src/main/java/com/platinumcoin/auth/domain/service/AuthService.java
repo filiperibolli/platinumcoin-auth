@@ -5,6 +5,8 @@ import com.platinumcoin.auth.domain.model.Cpf;
 import com.platinumcoin.auth.domain.model.RegisteredUser;
 import com.platinumcoin.auth.domain.model.UserRegistration;
 import com.platinumcoin.auth.domain.port.IdentityProvider;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.UUID;
 
@@ -13,6 +15,8 @@ import java.util.UUID;
  * no IdP como atributo do usuário — fonte da verdade no Keycloak (ADR-003).
  */
 public class AuthService {
+
+    private static final Logger log = LoggerFactory.getLogger(AuthService.class);
 
     private final IdentityProvider identityProvider;
 
@@ -27,7 +31,10 @@ public class AuthService {
     }
 
     public AuthTokens login(String email, String password) {
-        return identityProvider.login(email, password);
+        AuthTokens tokens = identityProvider.login(email, password);
+        // Sem e-mail nem token no log: o correlationId do MDC amarra o E2E entre serviços.
+        log.info("Login bem-sucedido");
+        return tokens;
     }
 
     public AuthTokens refresh(String refreshToken) {

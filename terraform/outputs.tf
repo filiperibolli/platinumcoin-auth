@@ -13,3 +13,7 @@ output "harness_client_id" {
 output "seed_user" {
   value = keycloak_user.seed.username
 }
+
+output "payments_audience" {
+  value = "platinumcoin-payments"
+}
