@@ -4,6 +4,7 @@ import com.platinumcoin.auth.domain.error.EmailAlreadyRegisteredException;
 import com.platinumcoin.auth.domain.error.IdentityProviderUnavailableException;
 import com.platinumcoin.auth.domain.error.InvalidCpfException;
 import com.platinumcoin.auth.domain.error.InvalidCredentialsException;
+import com.platinumcoin.auth.domain.error.InvalidRefreshTokenException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -58,6 +59,13 @@ public class ApiExceptionHandler {
         // Mensagem genérica de propósito: não revela se usuário existe ou se a senha errou.
         return problem(HttpStatus.UNAUTHORIZED, "INVALID_CREDENTIALS",
                 "Não autorizado", "Credenciais inválidas");
+    }
+
+    @ExceptionHandler(InvalidRefreshTokenException.class)
+    public ProblemDetail handleInvalidRefreshToken(InvalidRefreshTokenException ex) {
+        // Genérico de propósito: expirado, rotacionado (reuso) ou revogado → mesma resposta.
+        return problem(HttpStatus.UNAUTHORIZED, "INVALID_REFRESH_TOKEN",
+                "Não autorizado", "Refresh token inválido");
     }
 
     @ExceptionHandler(IdentityProviderUnavailableException.class)

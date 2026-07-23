@@ -4,6 +4,14 @@
 resource "keycloak_realm" "platinumcoin" {
   realm   = "platinumcoin"
   enabled = true
+
+  # Fatia 2 — ciclo de sessão: access curto (validação JWKS é offline, o TTL é o
+  # limite do dano), refresh maior com rotação; reuso de refresh revoga a sessão.
+  access_token_lifespan    = "5m0s"
+  sso_session_idle_timeout = "30m0s"
+  sso_session_max_lifespan = "10h0m0s"
+  revoke_refresh_token     = true
+  refresh_token_max_reuse  = 0
 }
 
 # Keycloak 26.x usa Declarative User Profile por default: atributo não declarado aqui
