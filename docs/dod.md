@@ -79,21 +79,19 @@
 - [x] Pelo menos o fluxo de **reset** verificado (IT com Keycloak + Mailhog na mesma network:
       `AccountFlowIntegrationTests`) e runbook com curl no README.
 
-## Fatia 6 — MFA (TOTP) *(opcional)*
-
-- [ ] Realm configura **TOTP** como required action; enrollment gera o segredo/QR.
-- [ ] Com TOTP ativo, o login **exige o código**; runbook mostra enroll + login.
-- [ ] Se inflar o escopo/testes: **documentar no README** ("MFA nativo do Keycloak, ativável")
-      em vez de construir. Decisão registrada.
-
-## Fatia 7 — Idempotência no `/v1/pix` *(opcional, final)*
+## Fatia 6 — Idempotência no `/v1/pix` + harness de demonstração *(final)*
 
 - [ ] Header **`Idempotency-Key`**; dedup **in-memory** (com TTL).
 - [ ] Mesma key + mesmo payload → **mesma resposta, sem segundo débito**; mesma key + payload
       diferente → **409**.
 - [ ] **Teste**: reenvio com a mesma key não duplica o débito.
-- [ ] Fallback aceitável se o tempo apertar: **parágrafo no README** ("em produção teria
-      idempotência"), sinalizando a consciência do problema.
+- [ ] **Coleção Postman** cobrindo os fluxos dos dois serviços (register/login/refresh/logout,
+      fluxos de conta, Pix feliz e negativos) com **exemplos de request** e a **jornada E2E**
+      (login no auth → Pix no payments).
+- [ ] **Página HTML** estática para chamar/testar os endpoints no browser, com exemplos de
+      request e a mesma jornada (login → token → Pix).
+- [ ] Fallback aceitável da idempotência se o tempo apertar: **parágrafo no README** ("em
+      produção teria idempotência"), sinalizando a consciência do problema.
 
 ---
 
@@ -103,6 +101,9 @@ Deixado de fora **de propósito** — em produção entraria, mas não agrega à
 
 - HA/cluster de Keycloak, secrets manager, TLS/mTLS entre serviços, WAF.
 - Rate limiting, bloqueio de brute-force além do padrão do Keycloak, CAPTCHA.
+- **MFA (TOTP)** — decisão de 2026-07: fica de fora da POC. O Keycloak traz TOTP nativo
+  (required action `CONFIGURE_TOTP` + Conditional OTP no direct grant), ativável sem código
+  novo; não agrega à tese (emissão confiável + validação assimétrica) e inflaria os testes.
 - Provedor de e-mail real (usamos Mailhog), verificação de telefone/KYC.
 - Persistência real de pagamentos, ledger, conciliação — o Pix é **mock de negócio**.
 - Métricas/dashboards/tracing distribuído — só Actuator health + propagação de `correlationId`.
