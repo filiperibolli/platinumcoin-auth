@@ -108,7 +108,7 @@ change-password), SMTP de dev (ex.: Mailhog) no compose, reenvio de código.
 ### Fatia 6 — Idempotência no `/v1/pix`
 **Objetivo:** `Idempotency-Key` com dedup simples (in-memory) para reenvio por timeout não debitar
 duas vezes. É escopo de negócio, não de identidade — entra por último; fallback é o parágrafo no
-README ("em produção isto teria idempotência").
+README ("em produção isto teria idempotência").Postman e html para chamar e testar com exemplos de request e jornada.
 
 ---
 
@@ -133,7 +133,7 @@ README ("em produção isto teria idempotência").
 
 ## Entregáveis de documentação
 - README raiz (cartão do projeto): propósito, os dois serviços e portas, subir (compose + terraform
-  apply), variáveis de ambiente, curl E2E que atravessa os dois serviços.Postman e html para chamar e testar com exemplos de request e jornada.
+  apply), variáveis de ambiente, curl E2E que atravessa os dois serviços.
 - ADRs acima em `docs/adr/`.
 
 ---
