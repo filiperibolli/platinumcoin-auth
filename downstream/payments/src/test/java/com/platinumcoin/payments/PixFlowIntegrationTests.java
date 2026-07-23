@@ -14,6 +14,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -163,7 +164,9 @@ class PixFlowIntegrationTests {
     }
 
     @Test
-    void tokenWithoutCustomerRoleIs403() {
+    void supportTokenOnPixIs403() {
+        // Fatia 4 — RBAC: carol tem `support` (e não `customer`); autenticada, mas sem
+        // permissão de enviar Pix. Token bom + role errada = 403, não 401.
         String token = loginToken("platinumcoin-harness", "carol@platinumcoin.dev");
 
         ResponseEntity<String> response = rest.postForEntity("/v1/pix",
@@ -171,7 +174,35 @@ class PixFlowIntegrationTests {
                 String.class);
 
         assertEquals(403, response.getStatusCode().value(),
-                "token válido sem a role customer deve receber 403");
+                "token support (sem role customer) deve receber 403 no /v1/pix");
+        assertTrue(response.getBody().contains("ACCESS_DENIED"));
+    }
+
+    @Test
+    void supportTokenReadsAdminReceipts() {
+        String customerToken = loginToken("platinumcoin-harness", "alice@platinumcoin.dev");
+        rest.postForEntity("/v1/pix",
+                pixRequest(customerToken, Map.of("pixKey", "bob@banco.dev", "amount", 7.77)),
+                Map.class);
+
+        String supportToken = loginToken("platinumcoin-harness", "carol@platinumcoin.dev");
+        ResponseEntity<List> response = rest.exchange("/v1/admin/receipts", HttpMethod.GET,
+                new HttpEntity<>(bearerHeaders(supportToken)), List.class);
+
+        assertEquals(200, response.getStatusCode().value(),
+                "role support deve acessar a visão administrativa");
+        assertTrue(response.getBody().size() >= 1, "deve listar o comprovante do Pix enviado");
+    }
+
+    @Test
+    void customerTokenOnAdminIs403() {
+        String token = loginToken("platinumcoin-harness", "alice@platinumcoin.dev");
+
+        ResponseEntity<String> response = rest.exchange("/v1/admin/receipts", HttpMethod.GET,
+                new HttpEntity<>(bearerHeaders(token)), String.class);
+
+        assertEquals(403, response.getStatusCode().value(),
+                "role customer não pode acessar a visão administrativa");
         assertTrue(response.getBody().contains("ACCESS_DENIED"));
     }
 
@@ -200,6 +231,12 @@ class PixFlowIntegrationTests {
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.setBearerAuth(bearer);
         return new HttpEntity<>(body, headers);
+    }
+
+    private HttpHeaders bearerHeaders(String bearer) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(bearer);
+        return headers;
     }
 
     private HttpEntity<Map<String, Object>> jsonRequest(Map<String, Object> body) {

@@ -37,6 +37,7 @@ mvn spring-boot:run                           # auth-service na 8081
 | `POST /v1/auth/logout` | auth | Revoga a sessão no IdP |
 | `GET /v1/me` | auth | Identidade extraída do token (RS256 via JWKS) |
 | `POST /v1/pix` | payments | Exige role `customer` + `aud` do payments; **debita o `accountId` do token** |
+| `GET /v1/admin/receipts` | payments | Exige role `support`; visão de atendimento dos comprovantes (POC: em memória) |
 
 ## E2E entre os serviços (a tese na prática)
 
@@ -61,6 +62,25 @@ curl -si -X POST localhost:8082/v1/pix -H "Authorization: Bearer $ACCESS" \
 # sem token → 401 problem+json; o mesmo $CID aparece nos logs JSON dos DOIS serviços
 curl -si -X POST localhost:8082/v1/pix -H 'Content-Type: application/json' \
   -d '{"pixKey":"bob@banco.dev","amount":1}'
+```
+
+## RBAC: customer vs. support (Fatia 4)
+
+Autorização por realm role, resolvida estruturalmente no `SecurityConfig` (não por `if` no
+handler): `/v1/pix` exige `customer`, `/v1/admin/**` exige `support`. Token **válido** com a
+role errada → **403** (`ACCESS_DENIED`); token inválido/ausente/aud errado continua **401**.
+
+```bash
+# carol tem a role support (seed do Terraform) — autentica, mas não envia Pix
+SUPPORT=$(curl -s -X POST localhost:8081/v1/auth/login -H 'Content-Type: application/json' \
+  -d '{"email":"carol@platinumcoin.dev","password":"Seed@12345"}' | jq -r .accessToken)
+
+curl -si -X POST localhost:8082/v1/pix -H "Authorization: Bearer $SUPPORT" \
+  -H 'Content-Type: application/json' -d '{"pixKey":"bob@banco.dev","amount":1}'   # → 403
+
+curl -s localhost:8082/v1/admin/receipts -H "Authorization: Bearer $SUPPORT" | jq  # → 200
+
+curl -si localhost:8082/v1/admin/receipts -H "Authorization: Bearer $ACCESS"       # customer → 403
 ```
 
 ## Ciclo de sessão e TTLs (racional — Fatia 2)
