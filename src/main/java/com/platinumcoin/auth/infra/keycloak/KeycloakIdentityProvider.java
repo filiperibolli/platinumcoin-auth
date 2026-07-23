@@ -5,6 +5,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.platinumcoin.auth.domain.error.EmailAlreadyRegisteredException;
 import com.platinumcoin.auth.domain.error.IdentityProviderUnavailableException;
 import com.platinumcoin.auth.domain.error.InvalidCredentialsException;
+import com.platinumcoin.auth.domain.error.InvalidRefreshTokenException;
 import com.platinumcoin.auth.domain.model.AuthTokens;
 import com.platinumcoin.auth.domain.model.RegisteredUser;
 import com.platinumcoin.auth.domain.model.UserRegistration;
@@ -121,6 +122,60 @@ public class KeycloakIdentityProvider implements IdentityProvider {
                     "Token endpoint respondeu " + e.getStatusCode().value(), e);
         } catch (RestClientException e) {
             throw new IdentityProviderUnavailableException("Falha ao chamar o token endpoint", e);
+        }
+    }
+
+    @Override
+    public AuthTokens refresh(String refreshToken) {
+        MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
+        form.add("grant_type", "refresh_token");
+        form.add("client_id", properties.harnessClientId());
+        form.add("refresh_token", refreshToken);
+        try {
+            TokenResponse response = restClient.post()
+                    .uri(properties.tokenEndpoint())
+                    .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                    .body(form)
+                    .retrieve()
+                    .body(TokenResponse.class);
+            return new AuthTokens(
+                    response.accessToken(),
+                    response.refreshToken(),
+                    response.expiresIn(),
+                    response.refreshExpiresIn(),
+                    response.tokenType());
+        } catch (RestClientResponseException e) {
+            // invalid_grant: expirado, já rotacionado (reuso) ou sessão revogada.
+            if (e.getStatusCode().is4xxClientError()) {
+                throw new InvalidRefreshTokenException();
+            }
+            throw new IdentityProviderUnavailableException(
+                    "Token endpoint respondeu " + e.getStatusCode().value(), e);
+        } catch (RestClientException e) {
+            throw new IdentityProviderUnavailableException("Falha ao chamar o token endpoint", e);
+        }
+    }
+
+    @Override
+    public void logout(String refreshToken) {
+        MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
+        form.add("client_id", properties.harnessClientId());
+        form.add("refresh_token", refreshToken);
+        try {
+            restClient.post()
+                    .uri(properties.logoutEndpoint())
+                    .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                    .body(form)
+                    .retrieve()
+                    .toBodilessEntity();
+        } catch (RestClientResponseException e) {
+            if (e.getStatusCode().is4xxClientError()) {
+                throw new InvalidRefreshTokenException();
+            }
+            throw new IdentityProviderUnavailableException(
+                    "Logout endpoint respondeu " + e.getStatusCode().value(), e);
+        } catch (RestClientException e) {
+            throw new IdentityProviderUnavailableException("Falha ao chamar o logout endpoint", e);
         }
     }
 

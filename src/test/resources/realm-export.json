@@ -1,6 +1,11 @@
 {
   "realm": "platinumcoin",
   "enabled": true,
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "revokeRefreshToken": true,
+  "refreshTokenMaxReuse": 0,
   "components": {
     "org.keycloak.userprofile.UserProfileProvider": [
       {

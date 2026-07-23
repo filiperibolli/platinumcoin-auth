@@ -13,4 +13,8 @@ public interface IdentityProvider {
     RegisteredUser register(UserRegistration registration);
 
     AuthTokens login(String email, String password);
+
+    AuthTokens refresh(String refreshToken);
+
+    void logout(String refreshToken);
 }

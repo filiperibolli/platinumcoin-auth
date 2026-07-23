@@ -18,6 +18,10 @@ public record KeycloakProperties(
         return realmUrl() + "/protocol/openid-connect/token";
     }
 
+    public String logoutEndpoint() {
+        return realmUrl() + "/protocol/openid-connect/logout";
+    }
+
     public String adminUsersEndpoint() {
         return baseUrl + "/admin/realms/" + realm + "/users";
     }

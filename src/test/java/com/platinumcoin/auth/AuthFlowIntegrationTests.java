@@ -77,6 +77,52 @@ class AuthFlowIntegrationTests {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
+    void refreshRotatesAndRejectsReusedToken() {
+        Map<String, Object> firstPair = loginAsAlice();
+        String firstRefresh = (String) firstPair.get("refreshToken");
+
+        ResponseEntity<Map> refreshed = rest.postForEntity("/v1/auth/refresh",
+                Map.of("refreshToken", firstRefresh), Map.class);
+        assertEquals(200, refreshed.getStatusCode().value(), "refresh válido deve retornar novo par");
+        assertNotNull(refreshed.getBody().get("accessToken"));
+        String rotatedRefresh = (String) refreshed.getBody().get("refreshToken");
+        assertNotNull(rotatedRefresh);
+        assertTrue(!rotatedRefresh.equals(firstRefresh), "rotação deve emitir refresh token novo");
+
+        ResponseEntity<String> reused = rest.postForEntity("/v1/auth/refresh",
+                Map.of("refreshToken", firstRefresh), String.class);
+        assertEquals(401, reused.getStatusCode().value(),
+                "refresh já rotacionado deve ser recusado (detecção de reuso)");
+        assertTrue(reused.getBody().contains("INVALID_REFRESH_TOKEN"));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void logoutRevokesSession() {
+        Map<String, Object> pair = loginAsAlice();
+        String refreshToken = (String) pair.get("refreshToken");
+
+        ResponseEntity<Void> logout = rest.postForEntity("/v1/auth/logout",
+                Map.of("refreshToken", refreshToken), Void.class);
+        assertEquals(204, logout.getStatusCode().value(), "logout deve retornar 204");
+
+        ResponseEntity<String> afterLogout = rest.postForEntity("/v1/auth/refresh",
+                Map.of("refreshToken", refreshToken), String.class);
+        assertEquals(401, afterLogout.getStatusCode().value(),
+                "refresh após logout deve ser recusado");
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> loginAsAlice() {
+        ResponseEntity<Map> login = rest.postForEntity("/v1/auth/login",
+                Map.of("email", "alice@platinumcoin.dev", "password", "Seed@12345"),
+                Map.class);
+        assertEquals(200, login.getStatusCode().value());
+        return login.getBody();
+    }
+
+    @Test
     void meWithoutTokenIsProblemJson401() {
         ResponseEntity<String> response = rest.getForEntity("/v1/me", String.class);
         assertEquals(401, response.getStatusCode().value());

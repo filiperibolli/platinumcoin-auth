@@ -29,4 +29,12 @@ public class AuthService {
     public AuthTokens login(String email, String password) {
         return identityProvider.login(email, password);
     }
+
+    public AuthTokens refresh(String refreshToken) {
+        return identityProvider.refresh(refreshToken);
+    }
+
+    public void logout(String refreshToken) {
+        identityProvider.logout(refreshToken);
+    }
 }

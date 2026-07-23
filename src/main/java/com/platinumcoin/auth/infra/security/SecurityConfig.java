@@ -19,7 +19,9 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/v1/auth/register", "/v1/auth/login").permitAll()
+                        // refresh/logout não exigem access token: o refresh token no corpo é a credencial
+                        .requestMatchers("/v1/auth/register", "/v1/auth/login",
+                                "/v1/auth/refresh", "/v1/auth/logout").permitAll()
                         .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2
