@@ -1,0 +1,10 @@
+<configuration>
+  <!-- Log estruturado JSON; o LogstashEncoder inclui o MDC (correlationId) por default. -->
+  <appender name="JSON" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder class="net.logstash.logback.encoder.LogstashEncoder"/>
+  </appender>
+
+  <root level="INFO">
+    <appender-ref ref="JSON"/>
+  </root>
+</configuration>
