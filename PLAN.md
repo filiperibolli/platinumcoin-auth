@@ -2,7 +2,6 @@
 
 > Plano faseado em **fatias verticais**. Cada fatia entrega um fluxo utilizável de ponta a
 > ponta (não uma camada horizontal). Nada de código de aplicação até este plano ser aprovado.
-> Prioridade: primeiro o núcleo que **prova a tese**, depois os incrementos.
 
 ## Tese do projeto (uma frase)
 
@@ -106,11 +105,7 @@ roles → authorities.
 change-password), SMTP de dev (ex.: Mailhog) no compose, reenvio de código.
 **Como verifico:** registro dispara e-mail de verificação (Mailhog); fluxo de reset e troca de senha.
 
-### Fatia 6 — MFA (TOTP) *(opcional)*
-**Objetivo:** segundo fator via suporte nativo do Keycloak. Entra só se não inflar o escopo/testes;
-senão, documentado no README.
-
-### Fatia 7 — Idempotência no `/v1/pix` *(opcional, final)*
+### Fatia 6 — Idempotência no `/v1/pix`
 **Objetivo:** `Idempotency-Key` com dedup simples (in-memory) para reenvio por timeout não debitar
 duas vezes. É escopo de negócio, não de identidade — entra por último; fallback é o parágrafo no
 README ("em produção isto teria idempotência").
@@ -138,7 +133,7 @@ README ("em produção isto teria idempotência").
 
 ## Entregáveis de documentação
 - README raiz (cartão do projeto): propósito, os dois serviços e portas, subir (compose + terraform
-  apply), variáveis de ambiente, curl E2E que atravessa os dois serviços.
+  apply), variáveis de ambiente, curl E2E que atravessa os dois serviços.Postman e html para chamar e testar com exemplos de request e jornada.
 - ADRs acima em `docs/adr/`.
 
 ---
