@@ -1,0 +1,27 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: platinumcoin-auth
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8080/realms/platinumcoin}
+
+platinumcoin:
+  keycloak:
+    base-url: ${KEYCLOAK_BASE_URL:http://localhost:8080}
+    realm: platinumcoin
+    harness-client-id: platinumcoin-harness
+    admin-client-id: auth-service-admin
+    # Default só para dev local (bate com o default do Terraform);
+    # em produção viria de secrets manager.
+    admin-client-secret: ${KEYCLOAK_ADMIN_CLIENT_SECRET:platinumcoin-local-dev-secret}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
