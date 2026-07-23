@@ -1,0 +1,364 @@
+{
+  "info": {
+    "name": "PlatinumCoin — auth + payments",
+    "description": "Jornada E2E da tese: o auth (8081, fachada sobre o Keycloak) emite JWT RS256 com accountId; o payments (8082) valida via JWKS + aud e debita a conta DO TOKEN.\n\nPré-requisito: `docker-compose up -d`, `terraform apply` e os dois serviços rodando (ver README).\n\nRode a pasta '1 · Jornada E2E' em ordem — o login guarda os tokens nas variáveis da coleção e os demais requests os usam. As pastas seguintes cobrem os fluxos de conta e os testes negativos de confiança.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "authUrl", "value": "http://localhost:8081" },
+    { "key": "paymentsUrl", "value": "http://localhost:8082" },
+    { "key": "accessToken", "value": "" },
+    { "key": "refreshToken", "value": "" },
+    { "key": "supportToken", "value": "" },
+    { "key": "correlationId", "value": "" },
+    { "key": "idempotencyKey", "value": "" },
+    { "key": "receiptId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "1 · Jornada E2E (a tese)",
+      "item": [
+        {
+          "name": "Login alice (customer) → tokens",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": { "type": "text/javascript", "exec": [
+                "pm.collectionVariables.set('correlationId', 'postman-' + Date.now());",
+                "pm.collectionVariables.set('idempotencyKey', pm.variables.replaceIn('{{$guid}}'));"
+              ] }
+            },
+            {
+              "listen": "test",
+              "script": { "type": "text/javascript", "exec": [
+                "pm.test('200 com access + refresh', () => {",
+                "  pm.response.to.have.status(200);",
+                "  const body = pm.response.json();",
+                "  pm.collectionVariables.set('accessToken', body.accessToken);",
+                "  pm.collectionVariables.set('refreshToken', body.refreshToken);",
+                "});",
+                "pm.test('access token carrega o claim accountId', () => {",
+                "  const claims = JSON.parse(atob(pm.response.json().accessToken.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));",
+                "  pm.expect(claims.accountId).to.be.a('string').and.not.empty;",
+                "  pm.expect(claims.aud).to.include('platinumcoin-payments');",
+                "});"
+              ] }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Correlation-Id", "value": "{{correlationId}}" }
+            ],
+            "url": "{{authUrl}}/v1/auth/login",
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"alice@platinumcoin.dev\",\n  \"password\": \"Seed@12345\"\n}" }
+          }
+        },
+        {
+          "name": "GET /v1/me — identidade do token",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('200 com accountId', () => {",
+              "  pm.response.to.have.status(200);",
+              "  pm.expect(pm.response.json().accountId).to.be.a('string').and.not.empty;",
+              "});"
+            ] } }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "X-Correlation-Id", "value": "{{correlationId}}" }
+            ],
+            "url": "{{authUrl}}/v1/me"
+          }
+        },
+        {
+          "name": "POST /v1/pix — debita o accountId DO TOKEN",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('201 com comprovante', () => {",
+              "  pm.response.to.have.status(201);",
+              "  const body = pm.response.json();",
+              "  pm.expect(body.status).to.eql('COMPLETED');",
+              "  pm.collectionVariables.set('receiptId', body.id);",
+              "});"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Correlation-Id", "value": "{{correlationId}}" },
+              { "key": "Idempotency-Key", "value": "{{idempotencyKey}}" }
+            ],
+            "url": "{{paymentsUrl}}/v1/pix",
+            "body": { "mode": "raw", "raw": "{\n  \"pixKey\": \"bob@banco.dev\",\n  \"amount\": 42.50\n}" }
+          }
+        },
+        {
+          "name": "POST /v1/pix — reenvio (mesma key) → mesmo comprovante",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('mesma resposta, sem segundo débito', () => {",
+              "  pm.response.to.have.status(201);",
+              "  pm.expect(pm.response.json().id).to.eql(pm.collectionVariables.get('receiptId'));",
+              "});"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Correlation-Id", "value": "{{correlationId}}" },
+              { "key": "Idempotency-Key", "value": "{{idempotencyKey}}" }
+            ],
+            "url": "{{paymentsUrl}}/v1/pix",
+            "body": { "mode": "raw", "raw": "{\n  \"pixKey\": \"bob@banco.dev\",\n  \"amount\": 42.50\n}" }
+          }
+        },
+        {
+          "name": "POST /v1/auth/refresh — rotação",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('novo par de tokens', () => {",
+              "  pm.response.to.have.status(200);",
+              "  const body = pm.response.json();",
+              "  pm.collectionVariables.set('accessToken', body.accessToken);",
+              "  pm.collectionVariables.set('refreshToken', body.refreshToken);",
+              "});"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Correlation-Id", "value": "{{correlationId}}" }
+            ],
+            "url": "{{authUrl}}/v1/auth/refresh",
+            "body": { "mode": "raw", "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}" }
+          }
+        },
+        {
+          "name": "POST /v1/auth/logout — revoga a sessão",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('204 sem corpo', () => pm.response.to.have.status(204));"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Correlation-Id", "value": "{{correlationId}}" }
+            ],
+            "url": "{{authUrl}}/v1/auth/logout",
+            "body": { "mode": "raw", "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2 · Conta (Fatia 5 — e-mails no Mailhog :8025)",
+      "item": [
+        {
+          "name": "POST /v1/auth/register — cria usuário + accountId",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('201 (ou 409 se o e-mail já existe de uma rodada anterior)', () => {",
+              "  pm.expect([201, 409]).to.include(pm.response.code);",
+              "});"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "url": "{{authUrl}}/v1/auth/register",
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"novo@platinumcoin.dev\",\n  \"password\": \"S3nh@forte123\",\n  \"fullName\": \"Novo Cliente\",\n  \"cpf\": \"529.982.247-25\"\n}" }
+          }
+        },
+        {
+          "name": "POST /v1/auth/verify-email — 202 sempre (anti-enumeração)",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('202 exista o e-mail ou não', () => pm.response.to.have.status(202));"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "url": "{{authUrl}}/v1/auth/verify-email",
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"novo@platinumcoin.dev\"\n}" }
+          }
+        },
+        {
+          "name": "POST /v1/auth/forgot-password — reset conclui no Keycloak",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('202 sempre', () => pm.response.to.have.status(202));"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "url": "{{authUrl}}/v1/auth/forgot-password",
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"novo@platinumcoin.dev\"\n}" }
+          }
+        },
+        {
+          "name": "POST /v1/auth/change-password — exige token E senha atual",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('204 (troca) ou 401 (senha atual errada / sem token)', () => {",
+              "  pm.expect([204, 401]).to.include(pm.response.code);",
+              "});"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{authUrl}}/v1/auth/change-password",
+            "body": { "mode": "raw", "raw": "{\n  \"currentPassword\": \"Seed@12345\",\n  \"newPassword\": \"N0v@senha456\"\n}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3 · Negativos de confiança (Fatias 3/4/6)",
+      "item": [
+        {
+          "name": "Pix sem token → 401 problem+json",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('401 fail-closed', () => {",
+              "  pm.response.to.have.status(401);",
+              "  pm.expect(pm.response.json().code).to.eql('TOKEN_INVALID');",
+              "});"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "url": "{{paymentsUrl}}/v1/pix",
+            "body": { "mode": "raw", "raw": "{\n  \"pixKey\": \"bob@banco.dev\",\n  \"amount\": 10\n}" }
+          }
+        },
+        {
+          "name": "Regra de ouro: accountId divergente no corpo → 422",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('422 ACCOUNT_MISMATCH — a conta debitada é sempre a do token', () => {",
+              "  pm.response.to.have.status(422);",
+              "  pm.expect(pm.response.json().code).to.eql('ACCOUNT_MISMATCH');",
+              "});"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{paymentsUrl}}/v1/pix",
+            "body": { "mode": "raw", "raw": "{\n  \"pixKey\": \"bob@banco.dev\",\n  \"amount\": 10,\n  \"accountId\": \"00000000-0000-0000-0000-000000000000\"\n}" }
+          }
+        },
+        {
+          "name": "Idempotency-Key reusada com payload diferente → 409",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('409 IDEMPOTENCY_CONFLICT — reuso de key não é retry', () => {",
+              "  pm.response.to.have.status(409);",
+              "  pm.expect(pm.response.json().code).to.eql('IDEMPOTENCY_CONFLICT');",
+              "});"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{idempotencyKey}}" }
+            ],
+            "url": "{{paymentsUrl}}/v1/pix",
+            "body": { "mode": "raw", "raw": "{\n  \"pixKey\": \"bob@banco.dev\",\n  \"amount\": 99999.99\n}" }
+          }
+        },
+        {
+          "name": "Login carol (support) → supportToken",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('200', () => {",
+              "  pm.response.to.have.status(200);",
+              "  pm.collectionVariables.set('supportToken', pm.response.json().accessToken);",
+              "});"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [ { "key": "Content-Type", "value": "application/json" } ],
+            "url": "{{authUrl}}/v1/auth/login",
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"carol@platinumcoin.dev\",\n  \"password\": \"Seed@12345\"\n}" }
+          }
+        },
+        {
+          "name": "Pix com token support → 403 (RBAC)",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('403 ACCESS_DENIED — token bom, role errada', () => {",
+              "  pm.response.to.have.status(403);",
+              "  pm.expect(pm.response.json().code).to.eql('ACCESS_DENIED');",
+              "});"
+            ] } }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{supportToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{paymentsUrl}}/v1/pix",
+            "body": { "mode": "raw", "raw": "{\n  \"pixKey\": \"bob@banco.dev\",\n  \"amount\": 10\n}" }
+          }
+        },
+        {
+          "name": "GET /v1/admin/receipts com support → 200",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('200 com a lista de comprovantes', () => {",
+              "  pm.response.to.have.status(200);",
+              "  pm.expect(pm.response.json()).to.be.an('array');",
+              "});"
+            ] } }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "Authorization", "value": "Bearer {{supportToken}}" } ],
+            "url": "{{paymentsUrl}}/v1/admin/receipts"
+          }
+        },
+        {
+          "name": "GET /v1/admin/receipts com customer → 403",
+          "event": [
+            { "listen": "test", "script": { "type": "text/javascript", "exec": [
+              "pm.test('403 — customer não vê a visão administrativa', () => {",
+              "  pm.response.to.have.status(403);",
+              "});"
+            ] } }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [ { "key": "Authorization", "value": "Bearer {{accessToken}}" } ],
+            "url": "{{paymentsUrl}}/v1/admin/receipts"
+          }
+        }
+      ]
+    }
+  ]
+}

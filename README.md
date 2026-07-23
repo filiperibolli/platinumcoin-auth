@@ -39,7 +39,7 @@ mvn spring-boot:run                           # auth-service na 8081
 | `POST /v1/auth/verify-email` | auth | (Re)envia o e-mail de verificação; 202 sempre (anti-enumeração) |
 | `POST /v1/auth/forgot-password` | auth | E-mail de reset (ação nativa `UPDATE_PASSWORD` do Keycloak); 202 sempre |
 | `POST /v1/auth/change-password` | auth | Autenticado; re-autentica com a senha atual e revoga as sessões |
-| `POST /v1/pix` | payments | Exige role `customer` + `aud` do payments; **debita o `accountId` do token** |
+| `POST /v1/pix` | payments | Exige role `customer` + `aud` do payments; **debita o `accountId` do token**; aceita `Idempotency-Key` |
 | `GET /v1/admin/receipts` | payments | Exige role `support`; visão de atendimento dos comprovantes (POC: em memória) |
 
 ## E2E entre os serviços (a tese na prática)
@@ -112,6 +112,41 @@ curl -si -X POST localhost:8081/v1/auth/change-password -H "Authorization: Beare
   -H 'Content-Type: application/json' \
   -d '{"currentPassword":"S3nh@forte123","newPassword":"N0v@senha456"}'   # → 204
 ```
+
+## Idempotência no Pix + harness de demonstração (Fatia 6)
+
+Retry por timeout não pode debitar duas vezes: o cliente manda um **`Idempotency-Key`** (UUID
+por operação) e o payments deduplica **por conta do token**, com TTL de 10 min (in-memory —
+POC; ver ADR-010). Mesma key + mesmo payload → **mesma resposta, um débito só**; mesma key +
+payload diferente → **409 `IDEMPOTENCY_CONFLICT`**; sem key → sem dedup (opt-in).
+
+```bash
+KEY=$(uuidgen)
+
+# primeira tentativa → 201 com o comprovante
+curl -s -X POST localhost:8082/v1/pix -H "Authorization: Bearer $ACCESS" \
+  -H "Idempotency-Key: $KEY" -H 'Content-Type: application/json' \
+  -d '{"pixKey":"bob@banco.dev","amount":42.50}' | jq
+
+# "timeout" do cliente: reenvio com a MESMA key → mesmo id, sem segundo débito
+curl -s -X POST localhost:8082/v1/pix -H "Authorization: Bearer $ACCESS" \
+  -H "Idempotency-Key: $KEY" -H 'Content-Type: application/json' \
+  -d '{"pixKey":"bob@banco.dev","amount":42.50}' | jq .id
+
+# reuso indevido: mesma key, payload diferente → 409 IDEMPOTENCY_CONFLICT
+curl -si -X POST localhost:8082/v1/pix -H "Authorization: Bearer $ACCESS" \
+  -H "Idempotency-Key: $KEY" -H 'Content-Type: application/json' \
+  -d '{"pixKey":"bob@banco.dev","amount":99.99}'
+```
+
+**Demo no browser:** com os dois serviços de pé, abra <http://localhost:8081> — a página
+estática percorre a jornada inteira (login → claims do token → Pix → replay idempotente →
+regra de ouro → RBAC), mostrando cada request/resposta e o `correlationId` da jornada. O
+payments libera CORS **só** para essa origem de dev.
+
+**Postman:** importe [`docs/postman/platinumcoin.postman_collection.json`](docs/postman/platinumcoin.postman_collection.json)
+e rode a pasta *1 · Jornada E2E* em ordem (o login guarda os tokens nas variáveis da coleção);
+as pastas seguintes cobrem os fluxos de conta e os testes negativos de confiança, com asserts.
 
 ## Ciclo de sessão e TTLs (racional — Fatia 2)
 

@@ -16,6 +16,9 @@ spring:
 platinumcoin:
   payments:
     required-audience: platinumcoin-payments
+    # Janela de dedup do Idempotency-Key: cobre o retry por timeout, não é histórico
+    # (comprovante não some — só a proteção de replay expira). Ver ADR-010.
+    idempotency-ttl: 10m
 
 management:
   endpoints:

@@ -2,6 +2,7 @@ package com.platinumcoin.auth.infra.security;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -26,6 +27,9 @@ public class SecurityConfig {
                         // change-password NÃO entra aqui — exige access token
                         .requestMatchers("/v1/auth/verify-email", "/v1/auth/forgot-password").permitAll()
                         .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
+                        // Página de demo (Fatia 6): harness estático de dev, sem dado sensível —
+                        // os tokens que ela exibe são os que o próprio usuário obteve ao logar.
+                        .requestMatchers(HttpMethod.GET, "/", "/index.html").permitAll()
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2
                         .jwt(Customizer.withDefaults())
