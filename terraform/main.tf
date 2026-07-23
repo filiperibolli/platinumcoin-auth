@@ -157,6 +157,14 @@ resource "keycloak_role" "customer" {
   description = "Cliente da fintech: pode enviar Pix"
 }
 
+# Fatia 4 — RBAC: support enxerga operações (endpoints /v1/admin/*) mas não envia Pix.
+# A negativa é estrutural: /v1/pix exige `customer`, e support simplesmente não a tem.
+resource "keycloak_role" "support" {
+  realm_id    = keycloak_realm.platinumcoin.id
+  name        = "support"
+  description = "Atendimento: consulta operações, não envia Pix"
+}
+
 # Scope que carimba o `aud` do payments no access token. Audiência custom (string),
 # sem client registrado para o payments: ele é só consumidor, não participa do OIDC.
 resource "keycloak_openid_client_scope" "payments" {
@@ -268,4 +276,36 @@ resource "keycloak_user_roles" "seed" {
   exhaustive = false
 
   role_ids = [keycloak_role.customer.id]
+}
+
+# --- Fatia 4: usuária seed de atendimento (role support, sem customer) ---
+
+resource "keycloak_user" "seed_support" {
+  realm_id       = keycloak_realm.platinumcoin.id
+  username       = "carol@platinumcoin.dev"
+  email          = "carol@platinumcoin.dev"
+  email_verified = true
+  first_name     = "Carol"
+  last_name      = "Support"
+  enabled        = true
+
+  attributes = {
+    accountId = "9a1c3d5e-7b2f-4a8c-8d0e-1f2a3b4c5d6e"
+    cpf       = "11144477735"
+  }
+
+  initial_password {
+    value     = var.seed_user_password
+    temporary = false
+  }
+
+  depends_on = [keycloak_realm_user_profile.platinumcoin]
+}
+
+resource "keycloak_user_roles" "seed_support" {
+  realm_id   = keycloak_realm.platinumcoin.id
+  user_id    = keycloak_user.seed_support.id
+  exhaustive = false
+
+  role_ids = [keycloak_role.support.id]
 }
