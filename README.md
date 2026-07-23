@@ -243,7 +243,8 @@ com custo total de créditos de **R$ 265,44** (~R$ 44 por fatia de ponta a ponta
 | Categoria | Nota | Comentário |
 |---|:---:|---|
 | Velocidade de entrega | 5/5 | Cada fatia saiu em uma sessão: infra, código, verificação via curl e docs no mesmo ciclo. O gargalo passou a ser revisar, não produzir. |
-| Custo-benefício | 5/5 | R$ 265,44 pelo projeto inteiro — menos que uma hora de consultoria por um sistema demonstrável com IdP real e dois serviços. |
+| Custo-benefício | 3/5 | R$ 265,44 pelo projeto inteiro é aceitável, mas boa parte dos créditos foi queimada em iterações de diagnóstico e re-leitura de contexto entre sessões — dava para chegar no mesmo resultado gastando menos. |
+| Documentação inicial | 2/5 | O kickoff (PLAN/CLAUDE.md e primeiras versões dos docs) saiu genérico e precisou de várias rodadas de revisão até refletir as decisões reais do projeto; a documentação só ficou boa depois de escrita dentro de cada fatia. |
 | Retrabalho exigido | 4/5 | Quase nada foi jogado fora, mas os gotchas do Keycloak 26 (user profile declarativo, mapper sem `Add to access token`, realm-export sem client scopes built-in) custaram iterações de diagnóstico. |
 | Aderência ao plano | 4/5 | Disciplina alta com as fatias e o DoD; houve um replanejamento no meio (MFA saiu do escopo da Fatia 6) — decisão de produto, mas exigiu realinhar plano e docs. |
 | Qualidade final | 4/5 | Arquitetura consistente (api/domain/infra, RFC 7807, correlationId, ADRs), com limites assumidos de POC: idempotência e comprovantes em memória. |
