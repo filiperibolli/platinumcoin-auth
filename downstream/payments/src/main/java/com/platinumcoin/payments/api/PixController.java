@@ -11,6 +11,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -30,7 +31,10 @@ public class PixController {
 
     @PostMapping("/v1/pix")
     @ResponseStatus(HttpStatus.CREATED)
-    public PixResponse send(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody PixRequest request) {
+    public PixResponse send(
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+            @Valid @RequestBody PixRequest request) {
         String tokenAccountId = jwt.getClaimAsString("accountId");
         if (tokenAccountId == null || tokenAccountId.isBlank()) {
             throw new MissingAccountClaimException();
@@ -38,6 +42,7 @@ public class PixController {
         if (request.accountId() != null && !request.accountId().equals(tokenAccountId)) {
             throw new AccountMismatchException();
         }
-        return PixResponse.from(pixService.send(tokenAccountId, request.pixKey(), request.amount()));
+        return PixResponse.from(
+                pixService.send(tokenAccountId, request.pixKey(), request.amount(), idempotencyKey));
     }
 }

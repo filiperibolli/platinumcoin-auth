@@ -164,6 +164,42 @@ class PixFlowIntegrationTests {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
+    void idempotentReplayReturnsSameReceiptWithoutSecondDebit() {
+        // Fatia 6 — cenário-alvo: o cliente deu timeout e reenviou. Mesma key + mesmo
+        // payload → mesma resposta, um débito só.
+        String token = loginToken("platinumcoin-harness", "alice@platinumcoin.dev");
+        Map<String, Object> body = Map.of("pixKey", "bob@banco.dev", "amount", 42.50);
+
+        ResponseEntity<Map> first = rest.postForEntity("/v1/pix",
+                pixRequest(token, "it-replay-key", body), Map.class);
+        ResponseEntity<Map> replay = rest.postForEntity("/v1/pix",
+                pixRequest(token, "it-replay-key", body), Map.class);
+
+        assertEquals(201, first.getStatusCode().value());
+        assertEquals(201, replay.getStatusCode().value(), "replay devolve a mesma resposta");
+        assertEquals(first.getBody().get("id"), replay.getBody().get("id"),
+                "reenvio com a mesma Idempotency-Key não pode gerar um segundo comprovante");
+    }
+
+    @Test
+    void idempotencyKeyReusedWithDifferentPayloadIs409() {
+        String token = loginToken("platinumcoin-harness", "alice@platinumcoin.dev");
+
+        rest.postForEntity("/v1/pix",
+                pixRequest(token, "it-conflict-key", Map.of("pixKey", "bob@banco.dev", "amount", 42.50)),
+                Map.class);
+        ResponseEntity<String> conflict = rest.postForEntity("/v1/pix",
+                pixRequest(token, "it-conflict-key", Map.of("pixKey", "bob@banco.dev", "amount", 99.99)),
+                String.class);
+
+        assertEquals(409, conflict.getStatusCode().value(),
+                "mesma key com payload diferente não é retry — é conflito");
+        assertTrue(conflict.getBody().contains("IDEMPOTENCY_CONFLICT"));
+        assertTrue(conflict.getBody().contains("correlationId"));
+    }
+
+    @Test
     void supportTokenOnPixIs403() {
         // Fatia 4 — RBAC: carol tem `support` (e não `customer`); autenticada, mas sem
         // permissão de enviar Pix. Token bom + role errada = 403, não 401.
@@ -230,6 +266,15 @@ class PixFlowIntegrationTests {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.setBearerAuth(bearer);
+        return new HttpEntity<>(body, headers);
+    }
+
+    private HttpEntity<Map<String, Object>> pixRequest(
+            String bearer, String idempotencyKey, Map<String, Object> body) {
+        HttpEntity<Map<String, Object>> request = pixRequest(bearer, body);
+        HttpHeaders headers = new HttpHeaders();
+        headers.putAll(request.getHeaders());
+        headers.set("Idempotency-Key", idempotencyKey);
         return new HttpEntity<>(body, headers);
     }
 

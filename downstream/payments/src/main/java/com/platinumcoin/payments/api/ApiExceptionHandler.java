@@ -1,6 +1,7 @@
 package com.platinumcoin.payments.api;
 
 import com.platinumcoin.payments.domain.error.AccountMismatchException;
+import com.platinumcoin.payments.domain.error.IdempotencyConflictException;
 import com.platinumcoin.payments.domain.error.MissingAccountClaimException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,6 +46,13 @@ public class ApiExceptionHandler {
         return problem(HttpStatus.UNPROCESSABLE_ENTITY, "ACCOUNT_MISMATCH",
                 "Conta divergente",
                 "O accountId do corpo diverge do accountId do token; a conta debitada é sempre a do token");
+    }
+
+    @ExceptionHandler(IdempotencyConflictException.class)
+    public ProblemDetail handleIdempotencyConflict(IdempotencyConflictException ex) {
+        return problem(HttpStatus.CONFLICT, "IDEMPOTENCY_CONFLICT",
+                "Conflito de idempotência",
+                "A Idempotency-Key já foi usada com um payload diferente; use uma key nova para uma nova operação");
     }
 
     @ExceptionHandler(MissingAccountClaimException.class)

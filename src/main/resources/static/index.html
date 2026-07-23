@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PlatinumCoin — demo E2E (auth → payments)</title>
+<style>
+  :root {
+    --bg: #0f1420; --panel: #171e2e; --line: #2a3245; --text: #dce3f0;
+    --muted: #8b95a9; --accent: #e5c454; --ok: #4cc38a; --err: #e5654c; --info: #6ea8fe;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { padding: 20px 28px; border-bottom: 1px solid var(--line); }
+  header h1 { margin: 0; font-size: 20px; }
+  header h1 span { color: var(--accent); }
+  header p { margin: 6px 0 0; color: var(--muted); max-width: 900px; }
+  main { display: grid; grid-template-columns: 420px 1fr; gap: 20px; padding: 20px 28px; }
+  @media (max-width: 1000px) { main { grid-template-columns: 1fr; } }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+            padding: 16px 18px; margin-bottom: 20px; }
+  h2 { margin: 0 0 4px; font-size: 15px; color: var(--accent); }
+  h2 + p { margin: 0 0 12px; color: var(--muted); font-size: 13px; }
+  label { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 2px; }
+  input { width: 100%; padding: 7px 9px; border-radius: 6px; border: 1px solid var(--line);
+          background: var(--bg); color: var(--text); font: 13px ui-monospace, monospace; }
+  .row { display: flex; gap: 8px; align-items: end; }
+  .row > div { flex: 1; }
+  button { margin-top: 12px; margin-right: 8px; padding: 8px 14px; border-radius: 6px;
+           border: 1px solid var(--line); background: #232c42; color: var(--text);
+           font-size: 13px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); color: #1a1a10; border-color: var(--accent); font-weight: 600; }
+  .chk { display: flex; gap: 8px; align-items: center; margin-top: 10px; font-size: 13px; color: var(--muted); }
+  .chk input { width: auto; }
+  pre { background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+        padding: 10px 12px; font: 12px/1.5 ui-monospace, monospace;
+        overflow-x: auto; white-space: pre-wrap; word-break: break-all; margin: 8px 0 0; }
+  #claims { color: var(--ok); }
+  .entry { border-bottom: 1px solid var(--line); padding: 12px 0; }
+  .entry .head { font: 13px ui-monospace, monospace; }
+  .status-ok { color: var(--ok); } .status-err { color: var(--err); }
+  .meta { color: var(--muted); font-size: 12px; }
+  .badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11px;
+           border: 1px solid var(--line); color: var(--muted); margin-left: 8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Platinum<span>Coin</span> — jornada E2E no browser</h1>
+  <p>A tese ao vivo: o login no <b>auth (8081)</b> obtém um JWT RS256 com <code>accountId</code>;
+     o <b>payments (8082)</b> valida via JWKS + <code>aud</code> e debita a conta <b>do token</b>.
+     O mesmo <code>X-Correlation-Id</code> atravessa os dois serviços (confira nos logs JSON).</p>
+</header>
+<main>
+<div><!-- coluna esquerda: ações -->
+
+  <section>
+    <h2>0 · Ambiente</h2>
+    <p>Portas padrão do compose + <code>mvn spring-boot:run</code>.</p>
+    <div class="row">
+      <div><label>auth</label><input id="authUrl" value="http://localhost:8081"></div>
+      <div><label>payments</label><input id="paymentsUrl" value="http://localhost:8082"></div>
+    </div>
+    <label>X-Correlation-Id desta jornada (aparece nos logs dos DOIS serviços)</label>
+    <input id="correlationId" readonly>
+  </section>
+
+  <section>
+    <h2>1 · Login (ou cadastro)</h2>
+    <p>Direct grant no client de harness — postura de prod seria auth-code+PKCE (ADR-008).</p>
+    <div class="row">
+      <div><label>e-mail</label><input id="email" value="alice@platinumcoin.dev"></div>
+      <div><label>senha</label><input id="password" type="password" value="Seed@12345"></div>
+    </div>
+    <button class="primary" onclick="login()">Login</button>
+    <button onclick="me()">GET /v1/me</button>
+    <button onclick="refresh()">Refresh</button>
+    <button onclick="logout()">Logout</button>
+    <details style="margin-top:12px">
+      <summary style="color:var(--muted);font-size:13px;cursor:pointer">Cadastrar um usuário novo</summary>
+      <div class="row">
+        <div><label>e-mail</label><input id="regEmail" value="novo@platinumcoin.dev"></div>
+        <div><label>senha</label><input id="regPassword" value="S3nh@forte123"></div>
+      </div>
+      <div class="row">
+        <div><label>nome</label><input id="regName" value="Novo Cliente"></div>
+        <div><label>CPF</label><input id="regCpf" value="529.982.247-25"></div>
+      </div>
+      <button onclick="register()">POST /v1/auth/register</button>
+      <p class="meta" style="margin-top:8px">O e-mail de verificação chega no Mailhog:
+        <a href="http://localhost:8025" target="_blank" style="color:var(--info)">localhost:8025</a></p>
+    </details>
+  </section>
+
+  <section>
+    <h2>2 · Pix (payments)</h2>
+    <p>Debita sempre o <code>accountId</code> do token. O reenvio com a mesma
+       <code>Idempotency-Key</code> devolve o mesmo comprovante, sem segundo débito.</p>
+    <div class="row">
+      <div><label>chave Pix destino</label><input id="pixKey" value="bob@banco.dev"></div>
+      <div><label>valor</label><input id="amount" value="42.50"></div>
+    </div>
+    <label>Idempotency-Key</label>
+    <div class="row">
+      <div><input id="idemKey"></div>
+      <div style="flex:0"><button style="margin-top:0" onclick="newIdemKey()">nova key</button></div>
+    </div>
+    <div class="chk">
+      <input type="checkbox" id="fraud">
+      <span>enviar <code>accountId</code> divergente no corpo (regra de ouro → 422)</span>
+    </div>
+    <button class="primary" onclick="pix()">POST /v1/pix</button>
+    <button onclick="pix()">Reenviar (mesma key → mesmo comprovante)</button>
+    <button onclick="pixSemToken()">Sem token (→ 401)</button>
+  </section>
+
+  <section>
+    <h2>3 · Suporte (RBAC)</h2>
+    <p><code>support</code> lê comprovantes mas não envia Pix; <code>customer</code> é o inverso.</p>
+    <button onclick="loginSupport()">Login carol (support)</button>
+    <button onclick="receipts()">GET /v1/admin/receipts</button>
+    <button onclick="pix()">Pix como support (→ 403)</button>
+  </section>
+
+</div>
+<div><!-- coluna direita: token + log -->
+
+  <section>
+    <h2>Token em uso <span id="who" class="badge">nenhum</span></h2>
+    <p>Claims do access token (decodificados aqui no browser — a assinatura quem valida é o servidor).</p>
+    <pre id="claims">—</pre>
+  </section>
+
+  <section>
+    <h2>Chamadas</h2>
+    <p>Request e resposta de cada passo, mais recente primeiro.</p>
+    <div id="log"><p class="meta">Nada ainda — comece pelo login.</p></div>
+  </section>
+
+</div>
+</main>
+<script>
+  let accessToken = null, refreshToken = null;
+
+  const $ = id => document.getElementById(id);
+  const authUrl = () => $('authUrl').value.replace(/\/$/, '');
+  const paymentsUrl = () => $('paymentsUrl').value.replace(/\/$/, '');
+
+  $('correlationId').value = 'demo-' + Date.now().toString(36);
+  newIdemKey();
+
+  function newIdemKey() {
+    $('idemKey').value = crypto.randomUUID();
+  }
+
+  function decodeJwt(token) {
+    try {
+      const payload = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+      return JSON.parse(atob(payload));
+    } catch { return null; }
+  }
+
+  function showToken(label) {
+    const claims = accessToken && decodeJwt(accessToken);
+    $('who').textContent = claims ? (label + ' · ' + (claims.email || claims.sub)) : 'nenhum';
+    $('claims').textContent = claims ? JSON.stringify({
+      accountId: claims.accountId,
+      email: claims.email,
+      aud: claims.aud,
+      roles: claims.realm_access && claims.realm_access.roles,
+      exp: claims.exp && new Date(claims.exp * 1000).toLocaleTimeString(),
+    }, null, 2) : '—';
+  }
+
+  async function call(title, method, url, { token, body, headers = {} } = {}) {
+    const reqHeaders = { 'X-Correlation-Id': $('correlationId').value, ...headers };
+    if (body !== undefined) reqHeaders['Content-Type'] = 'application/json';
+    if (token) reqHeaders['Authorization'] = 'Bearer ' + token;
+    let status = 'rede indisponível', payload = null;
+    try {
+      const response = await fetch(url, {
+        method, headers: reqHeaders, body: body === undefined ? undefined : JSON.stringify(body),
+      });
+      status = response.status;
+      const text = await response.text();
+      payload = text && JSON.parse(text);
+    } catch (e) { payload = { erro: String(e) }; }
+    logEntry(title, method, url, reqHeaders, body, status, payload);
+    return { status, payload };
+  }
+
+  function logEntry(title, method, url, reqHeaders, reqBody, status, resBody) {
+    const ok = typeof status === 'number' && status < 400;
+    const shownHeaders = Object.entries(reqHeaders)
+      .map(([k, v]) => k + ': ' + (k === 'Authorization' ? 'Bearer <access token>' : v))
+      .join('\n');
+    const entry = document.createElement('div');
+    entry.className = 'entry';
+    entry.innerHTML =
+      '<div class="head"><b>' + title + '</b> — ' + method + ' ' + url +
+      ' → <span class="' + (ok ? 'status-ok' : 'status-err') + '">' + status + '</span></div>' +
+      '<pre>' + shownHeaders + (reqBody ? '\n\n' + JSON.stringify(reqBody, null, 2) : '') + '</pre>' +
+      (resBody ? '<pre>' + JSON.stringify(resBody, null, 2) + '</pre>' : '');
+    const log = $('log');
+    if (log.firstChild && log.firstChild.tagName === 'P') log.innerHTML = '';
+    log.prepend(entry);
+  }
+
+  async function doLogin(email, password, label) {
+    const { status, payload } = await call('Login ' + label, 'POST', authUrl() + '/v1/auth/login',
+        { body: { email, password } });
+    if (status === 200) {
+      accessToken = payload.accessToken;
+      refreshToken = payload.refreshToken;
+      showToken(label);
+    }
+  }
+
+  const login = () => doLogin($('email').value, $('password').value, 'customer');
+  const loginSupport = () => doLogin('carol@platinumcoin.dev', 'Seed@12345', 'support');
+
+  async function register() {
+    await call('Cadastro', 'POST', authUrl() + '/v1/auth/register', { body: {
+      email: $('regEmail').value, password: $('regPassword').value,
+      fullName: $('regName').value, cpf: $('regCpf').value,
+    }});
+  }
+
+  const me = () => call('Quem sou eu', 'GET', authUrl() + '/v1/me', { token: accessToken });
+
+  async function refresh() {
+    const { status, payload } = await call('Refresh (rotação)', 'POST',
+        authUrl() + '/v1/auth/refresh', { body: { refreshToken } });
+    if (status === 200) {
+      accessToken = payload.accessToken;
+      refreshToken = payload.refreshToken;
+      showToken('renovado');
+    }
+  }
+
+  async function logout() {
+    await call('Logout (revoga sessão)', 'POST', authUrl() + '/v1/auth/logout',
+        { body: { refreshToken } });
+    accessToken = refreshToken = null;
+    showToken();
+  }
+
+  async function pix() {
+    const body = { pixKey: $('pixKey').value, amount: Number($('amount').value) };
+    if ($('fraud').checked) body.accountId = '00000000-0000-0000-0000-000000000000';
+    await call('Pix', 'POST', paymentsUrl() + '/v1/pix', {
+      token: accessToken, body, headers: { 'Idempotency-Key': $('idemKey').value },
+    });
+  }
+
+  const pixSemToken = () => call('Pix sem token', 'POST', paymentsUrl() + '/v1/pix',
+      { body: { pixKey: $('pixKey').value, amount: Number($('amount').value) } });
+
+  const receipts = () => call('Comprovantes (suporte)', 'GET',
+      paymentsUrl() + '/v1/admin/receipts', { token: accessToken });
+</script>
+</body>
+</html>

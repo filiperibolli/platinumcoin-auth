@@ -81,17 +81,18 @@
 
 ## Fatia 6 — Idempotência no `/v1/pix` + harness de demonstração *(final)*
 
-- [ ] Header **`Idempotency-Key`**; dedup **in-memory** (com TTL).
-- [ ] Mesma key + mesmo payload → **mesma resposta, sem segundo débito**; mesma key + payload
-      diferente → **409**.
-- [ ] **Teste**: reenvio com a mesma key não duplica o débito.
-- [ ] **Coleção Postman** cobrindo os fluxos dos dois serviços (register/login/refresh/logout,
-      fluxos de conta, Pix feliz e negativos) com **exemplos de request** e a **jornada E2E**
-      (login no auth → Pix no payments).
-- [ ] **Página HTML** estática para chamar/testar os endpoints no browser, com exemplos de
-      request e a mesma jornada (login → token → Pix).
-- [ ] Fallback aceitável da idempotência se o tempo apertar: **parágrafo no README** ("em
-      produção teria idempotência"), sinalizando a consciência do problema.
+- [x] Header **`Idempotency-Key`**; dedup **in-memory** (com TTL de 10 min, escopado pela
+      conta do token — ADR-010).
+- [x] Mesma key + mesmo payload → **mesma resposta, sem segundo débito**; mesma key + payload
+      diferente → **409** `IDEMPOTENCY_CONFLICT`.
+- [x] **Teste**: unit (dedup com clock controlado: replay, conflito, TTL, escopo por conta)
+      + IT (replay devolve o mesmo comprovante; reuso com payload diferente → 409).
+- [x] **Coleção Postman** (`docs/postman/`) cobrindo os fluxos dos dois serviços com
+      **exemplos de request**, asserts e a **jornada E2E** (login no auth → Pix no payments).
+- [x] **Página HTML** estática (servida pelo auth em `localhost:8081`) com a mesma jornada no
+      browser: login → claims do token → Pix idempotente → regra de ouro → RBAC.
+- [x] Fallback do README não foi necessário: a idempotência foi implementada (o corte que
+      permanece é o dedup in-memory vs. Redis/tabela em produção — explícito no ADR-010).
 
 ---
 
