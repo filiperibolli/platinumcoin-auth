@@ -17,7 +17,8 @@
   },
   "roles": {
     "realm": [
-      { "name": "customer", "description": "Cliente da fintech: pode enviar Pix" }
+      { "name": "customer", "description": "Cliente da fintech: pode enviar Pix" },
+      { "name": "support", "description": "Atendimento: consulta operações, não envia Pix" }
     ]
   },
   "clientScopes": [
@@ -141,6 +142,7 @@
       "enabled": true,
       "firstName": "Carol",
       "lastName": "Support",
+      "realmRoles": ["support"],
       "attributes": {
         "accountId": ["9a1c3d5e-7b2f-4a8c-8d0e-1f2a3b4c5d6e"]
       },
